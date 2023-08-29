@@ -15,6 +15,7 @@
 from heat.common.i18n import _
 from heat.engine import properties
 from heat.engine.resources import alarm_base
+from heat.engine.resources.openstack.aodh import alarm
 from heat.engine import support
 
 
@@ -57,7 +58,9 @@ common_gnocchi_properties_schema = {
 }
 
 
-class AodhGnocchiResourcesAlarm(alarm_base.BaseAlarm):
+class AodhGnocchiResourcesAlarm(alarm_base.BaseAlarm,
+                                alarm.AodhBaseActionsMixin,
+                                alarm.AodhParseLiveResourceDataMixin):
     """A resource allowing for the watch of some specified resource.
 
     An alarm that evaluates threshold based on some metric for the
@@ -103,33 +106,6 @@ class AodhGnocchiResourcesAlarm(alarm_base.BaseAlarm):
         kwargs = self._reformat_properties(kwargs)
 
         return kwargs
-
-    def handle_create(self):
-        props = self.get_alarm_props(self.properties)
-        props['name'] = self.physical_resource_name()
-        props['type'] = self.alarm_type
-        alarm = self.client().alarm.create(props)
-        self.resource_id_set(alarm['alarm_id'])
-
-    def handle_update(self, json_snippet, tmpl_diff, prop_diff):
-        if prop_diff:
-            new_props = json_snippet.properties(self.properties_schema,
-                                                self.context)
-            props = self.get_alarm_props(new_props)
-            self.client().alarm.update(self.resource_id, props)
-
-    def parse_live_resource_data(self, resource_properties,
-                                 resource_data):
-        record_reality = {}
-        rule = self.alarm_type + '_rule'
-        threshold_data = resource_data.get(rule).copy()
-        threshold_data.update(resource_data)
-        for key in self.properties_schema.keys():
-            if key in alarm_base.INTERNAL_PROPERTIES:
-                continue
-            if self.properties_schema[key].update_allowed:
-                record_reality.update({key: threshold_data.get(key)})
-        return record_reality
 
 
 class AodhGnocchiAggregationByMetricsAlarm(
